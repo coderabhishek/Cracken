@@ -6,7 +6,7 @@
 %%
 "=" { return EQ; }
 ";"	{ return COL;}
-"int"|"float"|"char" { return TYPE; }
+"int"|"float"|"char" { strcpy(yylval.str, yytext); return TYPE; }
 "{" { return OP_PARENS; }
 "}" { return CL_PARENS; }
 ")" { return OP_BR; }
@@ -15,13 +15,14 @@
 "]" { return CL_SQBR; }
 "+" { return PLUS; }
 "-" { return MINUS; }
-"*" { return MULTIPLY; }
+"*" { return STAR; }
 "/" { return DIVIDE; }
 "," { return COMMA; }
 "if" { return IF; }
 "else" { return ELSE; }
 "elseif" { return ELSEIF; }
 "while" { return WHILE; }
+"struct" { return STRUCT; }
 ">"|"<"|"!="|"=="|">="|"<=" { strcpy(yylval.str, yytext); return COMPARATOR; }
 
 
