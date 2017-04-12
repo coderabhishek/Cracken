@@ -1,12 +1,11 @@
 %{
 #include<string.h>
-#include "y.tab.h"
+#include "com.tab.hpp"
 %}
 
 %%
 "=" { return EQ; }
 ";"	{ return COL;}
-"int"|"float"|"char" { strcpy(yylval.str, yytext); return TYPE; }
 "{" { return OP_PARENS; }
 "}" { return CL_PARENS; }
 ")" { return OP_BR; }

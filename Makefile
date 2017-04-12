@@ -1,7 +1,7 @@
 all: 
-	lex com.l
-	yacc com.y -d
-	gcc y.tab.c lex.yy.c -o cc
+	flex -o lex.yy.cpp com.l
+	bison com.ypp -d
+	g++ -std=gnu++14 com.tab.cpp lex.yy.cpp -lfl -o cc
 
 clean:
-	rm y.tab.c y.tab.h lex.yy.c cc
+	rm lex.* cc com.tab.*

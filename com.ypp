@@ -1,0 +1,152 @@
+%{
+#include<iostream>
+#include<set>
+#include<map>
+#include<string>
+#include<string.h>
+#include<stdio.h>
+#include<stack>
+#include<stdlib.h>
+#include<memory>
+
+#include "util.cpp"
+
+using namespace std;
+
+//For debug
+bool ch = true;
+#define YYDEBUG 1
+
+extern stack<string> scope;
+extern int global_addr;
+extern char *yytext;
+void yyerror(char *s);
+int yylex();
+void yywrap();
+#define max_tab_size 1000
+int size[max_tab_size];
+
+%}
+%union { char str[50];}
+%start program;
+%token COL;
+%token OP_PARENS;
+%token CL_PARENS;
+%token OP_BR;
+%token CL_BR;
+%token OP_SQBR;
+%token CL_SQBR;
+%token IF;
+%token ELSE;
+%token ELSEIF;
+%token WHILE;
+%token EQ;
+%token COMMA;
+%token STAR;
+%token DIVIDE;
+%token PLUS;
+%token MINUS;
+%token STRUCT;
+%token <str> TYPE;
+%token <str> COMPARATOR;
+%token <str> IDENTIFIER;
+%token <str> INT_VAL;
+%token <str> CONST_STR;
+%token <str> REAL_VAL; 
+%type <str> constant;
+%type <symbol *> expr;
+%%
+
+program : lines program | function program | lines | function 	
+
+
+function : IDENTIFIER IDENTIFIER OP_PARENS param_list CL_PARENS OP_BR lines CL_BR
+
+param_list : param param_list | param
+
+param : IDENTIFIER IDENTIFIER 
+
+
+
+line : decl COL | expr COL | if_block COL | loop_block COL | struct_def
+
+struct_def : STRUCT IDENTIFIER OP_PARENS var_list CL_PARENS COL {
+	types[$2] = 5;	  
+	if(ch) cout<<"Type  ->"<<$2<<endl; 
+}
+
+var_list : IDENTIFIER IDENTIFIER COL {
+	if(types.find($1) == types.end())
+		yyerror("Undefined type.");
+	else {
+		 cout<<"STRUCT  "<<$-3<<endl;
+		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
+		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
+		scope.push($2);	
+	}
+}
+| IDENTIFIER IDENTIFIER COL var_list {
+	if(types.find($1) == types.end())
+		yyerror("Undefined type.");
+	else {
+		cout<<"STRUCT  "<<$-3<<endl; 
+		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
+		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
+		scope.push($2);	
+	}
+
+}
+
+if_block : IF OP_BR expr CL_BR OP_PARENS lines CL_PARENS 
+
+loop_block : WHILE OP_BR expr CL_BR OP_PARENS lines CL_PARENS 
+
+lines : line lines | line
+
+decl : IDENTIFIER IDENTIFIER_LIST {
+ if(types.find($1) == types.end())
+		yyerror("Undefined type.");
+	else {
+		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
+		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
+		scope.push($2);	
+	}    
+}
+
+IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST | IDENTIFIER COMMA IDENTIFIER_LIST  | IDENTIFIER EQ expr | IDENTIFIER { std::cout<<"YYY!!!\n";printf("||%s||", $1); } 
+
+place_holder : IDENTIFIER {
+}| constant{
+} 
+
+
+
+expr : place_holder {
+}/*| OP_PARENS expr CL_PARENS {
+}| expr PLUS sub_expr {
+}| expr MINUS sub_expr | IDENTIFIER EQ expr | expr COMMA expr  */
+
+/*sub_expr : place_holder STAR place_holder | place_holder DIVIDE place_holder | expr*/ 
+
+constant : REAL_VAL {
+strcpy($$, $1);		 
+}| INT_VAL {
+strcpy($$, $1);		 
+}| CONST_STR {
+strcpy($$, $1);		 
+}
+%%
+
+void yyerror (char *s) {
+  printf("SYNTAX ERROR NEAR : '%s'\n", yytext);
+
+}
+
+int main(){
+	global_addr = 0;	
+	types_init();
+	return yyparse();
+}
+void yywrap(void) {
+	return;
+}
