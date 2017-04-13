@@ -28,7 +28,7 @@ string get_label(){
 	if(t == start_label){
 		start_label.push_back('1');
 	}
-	return t + ":";
+	return t;
 }
 
 int ic_var_num = 2; // _to and _t1 are reserved for temp expr evaluation

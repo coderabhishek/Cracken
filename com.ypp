@@ -55,6 +55,7 @@ int size[max_tab_size];
 %type <str> constant;
 %type <cs> expr; 
 %type <cs> expr_l;
+%type <cs> assignment;
 %type <cs> lines;
 %type <cs> line;
 %type <cs> if_block;
@@ -87,16 +88,26 @@ line : decl COL{
 	$$ = $1;
 } | expr COL{
 	$$ = $1;
-} | if_block COL{
+} | if_block {
 	$$ = $1;
-} | loop_block COL{
+} | loop_block {
 	$$ = $1;
 } | struct_def{
 	cout<<"STruct Matched thats bad!!\n";
 	$$ = NULL;
+} | assignment {
+	$$ = $1;
 }
 
-
+assignment : IDENTIFIER EQ expr COL {
+	if(sym_table.find($1) == sym_table.end())
+		yyerror("No var named " + string($1) + " defined!!");
+	if($3->type != sym_table[$1])
+		yyerror("Type mismatch!! Can't assign " + $3->type + " to " + sym_table[$1] + ".");
+	$$ = create();	
+	$$->ic = $3->ic;
+	$$->ic += string($1) + " = _t0;\n"; 
+}
 struct_def : STRUCT IDENTIFIER OP_PARENS var_list CL_PARENS COL {
 	types[$2] = 5;	  
 	if(ch) cout<<"Type  ->"<<$2<<endl; 
@@ -125,16 +136,31 @@ var_list : IDENTIFIER IDENTIFIER COL {
 if_block : IF OP_BR expr COMPARATOR expr  CL_BR OP_PARENS lines CL_PARENS {
 	$$ = create();
 	$$->type = "none";
-	string temp_code, var1 = get_ic_var_name(), l1 = get_label(), l2 = get_label();
-	
-	temp_code = var1 + " = " + $3->ic + ";\n";
-	temp_code += "ifz " + var1 + " goto " + l1 + ";\n";
-	temp_code += $8->ic + "\n";
-	temp_code += l1  + "\n";  
-	$$->ic = temp_code;	
+	string l1 = get_label();
+	$$->ic = $3->ic + "\n";
+	$$->ic += "_t1 = _t0;\n";
+	$$->ic += $5->ic;	
+	$$->ic += "_t0 = _t1 " + string($4) + " _t0;\n"; 
+	$$->ic += "ifz _t0 goto " + l1 + ";\n";
+	$$->ic += $8->ic + "\n";
+	$$->ic += l1  + ":\n";  
 } 
 
-loop_block : WHILE OP_BR expr CL_BR OP_PARENS lines CL_PARENS 
+loop_block : WHILE OP_BR expr COMPARATOR expr CL_BR OP_PARENS lines CL_PARENS {
+	$$ = create();
+	$$->type = "none";
+	string l1 = get_label(), l2 = get_label();
+
+	$$->ic = l2 + ":\n";
+	$$->ic += $3->ic + "\n";
+	$$->ic += "_t1 = _t0;\n";
+	$$->ic += $5->ic;	
+	$$->ic += "_t0 = _t1 " + string($4) + " _t0;\n"; 	
+	$$->ic += "ifz _t0 goto " + l1 + ";\n";
+	$$->ic += $8->ic + "\n";
+	$$->ic += "goto " + l2 + ";\n";
+	$$->ic += l1  + ":\n";  
+}
 
 lines : line lines{
 	$$ = create();
@@ -198,7 +224,7 @@ expr: expr PLUS expr_l {
 	string temp = $1->ic + "\n";
 	temp += "_t1 = _t0;\n";
 	temp += $3->ic + "\n";
-	temp += "_t0 = _t1 * _t0;\n";
+	temp += "_t0 = _t1 + _t0;\n";
 	$$->ic = temp;
 }| expr MINUS expr_l {
 	$$ = create();
@@ -208,7 +234,7 @@ expr: expr PLUS expr_l {
 	string temp = $1->ic + "\n";
 	temp += "_t1 = _t0;\n";
 	temp += $3->ic + "\n";
-	temp += "_t0 = _t1 * _t0;\n";
+	temp += "_t0 = _t1 - _t0;\n";
 	$$->ic = temp;
 }| expr_l {
 	$$ = create();

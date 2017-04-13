@@ -25,7 +25,7 @@
 ">"|"<"|"!="|"=="|">="|"<=" { strcpy(yylval.str, yytext); return COMPARATOR; }
 
 
-'.' { strcpy(yylval.str, yytext); return CONST_STR; } 
+'.' {strcpy(yylval.str, yytext); return CONST_STR; } 
 
 [a-zA-Z]+[a-zA-Z0-9_]* { strcpy(yylval.str, yytext); return IDENTIFIER; }
 [0-9]+	{ strcpy(yylval.str, yytext); return INT_VAL; }
