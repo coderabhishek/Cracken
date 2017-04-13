@@ -17,17 +17,16 @@ using namespace std;
 bool ch = true;
 #define YYDEBUG 1
 
-extern stack<string> scope;
-extern int global_addr;
 extern char *yytext;
-void yyerror(char *s);
+extern int yylineno;
+void yyerror(string);
 int yylex();
 void yywrap();
 #define max_tab_size 1000
 int size[max_tab_size];
 
 %}
-%union { char str[50];}
+%union {char str[50]; struct code_segment* cs; }
 %start program;
 %token COL;
 %token OP_PARENS;
@@ -54,10 +53,26 @@ int size[max_tab_size];
 %token <str> CONST_STR;
 %token <str> REAL_VAL; 
 %type <str> constant;
-%type <symbol *> expr;
+%type <cs> expr; 
+%type <cs> expr_l;
+%type <cs> lines;
+%type <cs> line;
+%type <cs> if_block;
+%type <cs> loop_block;
+%type <cs> var_list;
+%type <cs> decl;
+%type <str> place_holder;
+%type <cs> expr_ll;
+%type <cs> IDENTIFIER_LIST;
+
+
+
+
 %%
 
-program : lines program | function program | lines | function 	
+program : lines program | function program | lines{
+	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
+}	| function 	
 
 
 function : IDENTIFIER IDENTIFIER OP_PARENS param_list CL_PARENS OP_BR lines CL_BR
@@ -68,7 +83,19 @@ param : IDENTIFIER IDENTIFIER
 
 
 
-line : decl COL | expr COL | if_block COL | loop_block COL | struct_def
+line : decl COL{
+	$$ = $1;
+} | expr COL{
+	$$ = $1;
+} | if_block COL{
+	$$ = $1;
+} | loop_block COL{
+	$$ = $1;
+} | struct_def{
+	cout<<"STruct Matched thats bad!!\n";
+	$$ = NULL;
+}
+
 
 struct_def : STRUCT IDENTIFIER OP_PARENS var_list CL_PARENS COL {
 	types[$2] = 5;	  
@@ -79,50 +106,156 @@ var_list : IDENTIFIER IDENTIFIER COL {
 	if(types.find($1) == types.end())
 		yyerror("Undefined type.");
 	else {
-		 cout<<"STRUCT  "<<$-3<<endl;
-		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
-		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
-		scope.push($2);	
+		cout<<"STRUCT  "<<$<str>-1<<endl;
+		string tt = $<str>-1;
+		sym_table[$2] = tt + "." + $1;
 	}
 }
 | IDENTIFIER IDENTIFIER COL var_list {
 	if(types.find($1) == types.end())
 		yyerror("Undefined type.");
 	else {
-		cout<<"STRUCT  "<<$-3<<endl; 
-		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
-		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
+		cout<<"STRUCT  "<<$<str>-1<<endl; 
+		sym_table[$2] =  $1;
 		scope.push($2);	
 	}
 
 }
 
-if_block : IF OP_BR expr CL_BR OP_PARENS lines CL_PARENS 
+if_block : IF OP_BR expr COMPARATOR expr  CL_BR OP_PARENS lines CL_PARENS {
+	$$ = create();
+	$$->type = "none";
+	string temp_code, var1 = get_ic_var_name(), l1 = get_label(), l2 = get_label();
+	
+	temp_code = var1 + " = " + $3->ic + ";\n";
+	temp_code += "ifz " + var1 + " goto " + l1 + ";\n";
+	temp_code += $8->ic + "\n";
+	temp_code += l1  + "\n";  
+	$$->ic = temp_code;	
+} 
 
 loop_block : WHILE OP_BR expr CL_BR OP_PARENS lines CL_PARENS 
 
-lines : line lines | line
+lines : line lines{
+	$$ = create();
+	$$->type = "none";    
+	$$->ic = $1->ic +"\n" + $2->ic; 
+} | line {
+	$$ = create();
+	$$->type = "none";
+	$$->ic = $1->ic;
+}
 
 decl : IDENTIFIER IDENTIFIER_LIST {
  if(types.find($1) == types.end())
-		yyerror("Undefined type.");
-	else {
-		sym_table[$2] =  make_unique<symbol>($1, get_addr($1));
-		if(ch) cout<<"Pushing to scope  "<<$2<<endl;	
-		scope.push($2);	
-	}    
+		yyerror("Undefined type.");   
+	$$ = $2;
 }
 
-IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST | IDENTIFIER COMMA IDENTIFIER_LIST  | IDENTIFIER EQ expr | IDENTIFIER { std::cout<<"YYY!!!\n";printf("||%s||", $1); } 
 
-place_holder : IDENTIFIER {
-}| constant{
+/*Not done */
+IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST {
+	if($3->type != $<str>0)
+		yyerror("Type mismatched " + $3->type + "   " + $<str>0);		
+	sym_table[$1] = $<str>0;
+	$$ = create();
+	$$->type = $<str>0;
+	$$->ic = $3->ic;
+	$$->ic += string($1) + " = _t0;\n";
+	$$->ic += $5->ic + "\n"; 
+}| IDENTIFIER COMMA IDENTIFIER_LIST{
+	sym_table[$1] = $<str>0;
+	$$ = create();
+	$$->type = $<str>0;
+	$$->ic = string($1) +  " = 0;\n";
+	$$->ic += $3->ic + "\n";	
+}  | IDENTIFIER EQ expr{
+	if($3->type != $<str>0)
+		yyerror("Type mismatched " + $3->type + "   " + $<str>0);		
+	sym_table[$1] = $<str>0;
+	$$ = create();
+	$$->type = $<str>0;
+	$$->ic = $3->ic;
+	$$->ic += string($1) + " = _t0;\n";
+} | IDENTIFIER { sym_table[$1] = $<str>0;
+	$$ = create();
+	$$->type = $<str>0;
+	$$->ic = string($1) + " = 0;\n";
 } 
 
+place_holder : IDENTIFIER {
+	strcpy($$, $1);
+}| constant{
+	strcpy($$, $1);
+} 
+/*   --- ND --- */
+
+expr: expr PLUS expr_l {
+	$$ = create();
+	if($1->type != $3->type)
+		yyerror("Type Mismatch!!");
+	$$->type = $1->type;
+	string temp = $1->ic + "\n";
+	temp += "_t1 = _t0;\n";
+	temp += $3->ic + "\n";
+	temp += "_t0 = _t1 * _t0;\n";
+	$$->ic = temp;
+}| expr MINUS expr_l {
+	$$ = create();
+	if($1->type != $3->type)
+		yyerror("Type Mismatch!!");
+	$$->type = $1->type;
+	string temp = $1->ic + "\n";
+	temp += "_t1 = _t0;\n";
+	temp += $3->ic + "\n";
+	temp += "_t0 = _t1 * _t0;\n";
+	$$->ic = temp;
+}| expr_l {
+	$$ = create();
+	$$->type = $1->type;
+	string temp = $1->ic + "\n";
+	$$->ic = temp;
+}| OP_BR expr CL_BR {
+	$$ = create();
+	$$->type = $2->type;
+	string temp = $2->ic + "\n";
+	$$->ic = temp;
+}
+
+expr_l : expr_l STAR expr_ll {
+	$$ = create();
+	if($1->type != $3->type)
+		yyerror("Type Mismatch!!");
+	$$->type = $1->type;
+	string temp = $1->ic + "\n";
+	temp += "_t1 = _t0;\n";
+	temp += $3->ic + "\n";
+	temp += "_t0 = _t1 * _t0;\n";
+	$$->ic = temp;
+}| expr_l DIVIDE expr_ll {
+	$$ = create();
+	if($1->type != $3->type)
+		yyerror("Type Mismatch!!");
+	$$->type = $1->type;
+	string temp = $1->ic + "\n";
+	temp += "_t1 = _t0;\n";
+	temp += $3->ic + "\n";
+	temp += "_t0 = _t1 / _t0;\n";
+	$$->ic = temp;
+}| expr_ll  {
+	$$ = $1;
+}
+
+expr_ll : place_holder {
+	$$ = create();
+	$$->type = find_type($1);
+	$$->ic = "_t0 = " + string($1) + ";\n";
+}  
 
 
-expr : place_holder {
-}/*| OP_PARENS expr CL_PARENS {
+
+
+/*| OP_PARENS expr CL_PARENS {
 }| expr PLUS sub_expr {
 }| expr MINUS sub_expr | IDENTIFIER EQ expr | expr COMMA expr  */
 
@@ -136,12 +269,6 @@ strcpy($$, $1);
 strcpy($$, $1);		 
 }
 %%
-
-void yyerror (char *s) {
-  printf("SYNTAX ERROR NEAR : '%s'\n", yytext);
-
-}
-
 int main(){
 	global_addr = 0;	
 	types_init();
@@ -149,4 +276,8 @@ int main(){
 }
 void yywrap(void) {
 	return;
+}
+
+void yyerror(string s){
+	cout<<"Error near line "<<yylineno<<" Token->  "<<yytext<<"\n\n"<<s;
 }

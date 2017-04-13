@@ -8,8 +8,8 @@
 ";"	{ return COL;}
 "{" { return OP_PARENS; }
 "}" { return CL_PARENS; }
-")" { return OP_BR; }
-"(" { return CL_BR; }
+"(" { return OP_BR; }
+")" { return CL_BR; }
 "[" { return OP_SQBR; }
 "]" { return CL_SQBR; }
 "+" { return PLUS; }
@@ -25,7 +25,7 @@
 ">"|"<"|"!="|"=="|">="|"<=" { strcpy(yylval.str, yytext); return COMPARATOR; }
 
 
-\"[a-zA-Z0-9]*\"  { strcpy(yylval.str, yytext); return CONST_STR; }
+'.' { strcpy(yylval.str, yytext); return CONST_STR; } 
 
 [a-zA-Z]+[a-zA-Z0-9_]* { strcpy(yylval.str, yytext); return IDENTIFIER; }
 [0-9]+	{ strcpy(yylval.str, yytext); return INT_VAL; }
