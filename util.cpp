@@ -101,6 +101,7 @@ class sym_table_cl{
 		void set(string name, string type){
 			assert(sym_tab[name].empty() or sym_tab[name].top().first >= cur_scope);
 			if(!sym_tab[name].empty() and  sym_tab[name].top().first == cur_scope){
+				cout<<"ASGASFGASDGASGSAGASDFGASDFGASDFGADFG\n\n";
 				yyerror("Variable already declared!!");	
 			}
 
@@ -108,12 +109,12 @@ class sym_table_cl{
 		}	
 
 		string get(string name){
-			cout<<"Get  "<<name<<"  "<<cur_scope<<endl;
 			if(sym_tab.find(name) != sym_tab.end())
 				return sym_tab[name].top().second;
+			yyerror("No variable named " + name);
 		}
 
-		void clear_cur_scope(){
+		void clear_scope(){
 			for(auto it = sym_tab.begin();it!=sym_tab.end();++it){
 				assert(it->second.top().first >= cur_scope);
 				if(it->second.top().first == cur_scope){

@@ -78,37 +78,43 @@ bool func_bool = false;
 %type <cs> place_holder_list;
 %%
 
-program : program lines {
+program : program line {
 	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
 }| program function {
 	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
-}| lines {
+}| line {
 	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
 }	| function {
 	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
 }	
 
 
-function : IDENTIFIER IDENTIFIER OP_BR param_list CL_BR OP_PARENS lines CL_PARENS{
+function : IDENTIFIER IDENTIFIER OP_BR emp_f param_list CL_BR OP_PARENS lines CL_PARENS{
 	 if(types.find($1) == types.end())
 		yyerror("Unknown type " + string($1) + ". ");
-	if($7->type != $1)
+	if($8->type != $1)
 		yyerror("Wrong return type!!");		
 	func temp_f = func();
 	temp_f.name = string($2);
 	temp_f.r_type = string($1);
-	temp_f.para_type_list = $4->v; 
+	temp_f.para_type_list = $5->v; 
 	funcs.push_back(temp_f);
 	$$ = create();
 	$$->type = $1;
 	$$->ic = "begfunc " + string($2) + to_string(size_of_param_frame(temp_f.para_type_list)) + ";\n";
-	$$->ic += $7->ic;
-	$$->ic += "func end;\n";	
+	$$->ic += $8->ic;
+	$$->ic += "func end;\n";		
+	sym_table.clear_scope();
 	cur_scope++;
 	for(auto el: temp_f.para_type_list){
 		cout<<el<<"   ";
 	}
 	func_bool = false;
+}
+
+emp_f : {
+      cout<<"Cahgned Scope\n";
+	cur_scope--;      
 }
 
 param_list : param COMMA param_list{
@@ -122,11 +128,7 @@ param_list : param COMMA param_list{
 }
 
 param : IDENTIFIER IDENTIFIER {
-      if(!func_bool)
-	{
-		cur_scope--;
-		func_bool = true;
-	}
+	cout<<"cur_scope->"<<cur_scope<<endl;
 	strcpy($$, $1);     
 	sym_table.set($2, $1); 
 }
@@ -259,6 +261,7 @@ if_block : IF OP_BR expr COMPARATOR expr  CL_BR if_scope_prod OP_PARENS lines CL
 	$$->ic += "ifz _t0 goto " + l1 + ";\n";
 	$$->ic += $9->ic + "\n";
 	$$->ic += l1  + ":\n";  
+	sym_table.clear_scope();
 	cur_scope++;
 } 
 
@@ -280,6 +283,7 @@ $$->ic = l2 + ":\n";
 	$$->ic += $9->ic + "\n";
 	$$->ic += "goto " + l2 + ";\n";
 	$$->ic += l1  + ":\n";  
+	sym_table.clear_scope();
 	cur_scope++;
 }
 
