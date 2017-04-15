@@ -221,4 +221,8 @@ int size_of_param_frame(vector<string> &v){
 	return res;
 }
 
-
+string f_name;
+vector<string> p_end_iterator;
+vector<func> f_end_iterator;
+vector<func>::iterator func_itr = f_end_iterator.end();
+vector<string>::iterator param_itr = p_end_iterator.end();	

@@ -1,5 +1,6 @@
 %{
 #include<iostream>
+#include<algorithm>
 #include<vector>
 #include<set>
 #include<map>
@@ -66,19 +67,22 @@ bool func_bool = false;
 %type <cs> var_list;
 %type <cs> decl;
 %type <str> place_holder;
+%type <cs> func_call 
 %type <cs> expr_ll;
 %type <cs> IDENTIFIER_LIST;
 %type < pl > param_list 
 %type <str> param;
 %type <cs> function;
 %type <cs> return_stmt;
+%type <cs> struct_def;
+%type <cs> place_holder_list;
 %%
 
-program : lines program {
-	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
-}| function program {
-	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
-}| lines{
+program : program lines {
+	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
+}| program function {
+	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
+}| lines {
 	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
 }	| function {
 	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
@@ -86,7 +90,7 @@ program : lines program {
 
 
 function : IDENTIFIER IDENTIFIER OP_BR param_list CL_BR OP_PARENS lines CL_PARENS{
-	if(types.find($1) == types.end())
+	 if(types.find($1) == types.end())
 		yyerror("Unknown type " + string($1) + ". ");
 	if($7->type != $1)
 		yyerror("Wrong return type!!");		
@@ -101,21 +105,24 @@ function : IDENTIFIER IDENTIFIER OP_BR param_list CL_BR OP_PARENS lines CL_PAREN
 	$$->ic += $7->ic;
 	$$->ic += "func end;\n";	
 	cur_scope++;
+	for(auto el: temp_f.para_type_list){
+		cout<<el<<"   ";
+	}
 	func_bool = false;
 }
 
-param_list : param param_list{
-	$$ = $2;
+param_list : param COMMA param_list{
+	   $$ = $3;
 	$$->v.push_back(string($1));	
 } | param {
 	vector<string> v = {string($1)};
 	$$ = new param_list();
 	$$->v = v;
-	
+
 }
 
 param : IDENTIFIER IDENTIFIER {
-      	if(!func_bool)
+      if(!func_bool)
 	{
 		cur_scope--;
 		func_bool = true;
@@ -127,7 +134,7 @@ param : IDENTIFIER IDENTIFIER {
 
 
 line : decl COL{
-	$$ = $1;
+     $$ = $1;
 } | expr COL{
 	$$ = $1;
 } | if_block {
@@ -135,22 +142,74 @@ line : decl COL{
 } | loop_block {
 	$$ = $1;
 } | struct_def{
-	cout<<"STruct Matched thats bad!!\n";
-	$$ = NULL;
+	cout<<$1->ic;
+	$$ = $1;
 } | assignment {
 	$$ = $1;
 } | return_stmt {
 	$$ = $1;
+} | func_call {
+	$$ = $1;
+}
+
+func_call : IDENTIFIER OP_BR emp place_holder_list CL_BR COL {
+	  string ts = $1; 
+	  if(func_itr->para_type_list.end() != param_itr)
+		yyerror("Too few parameters");
+	  $$ = create();
+	  $$->type = func_itr->r_type;
+	  $$->ic = $4->ic;
+	  for(int i=0;i<func_itr->para_type_list.size();++i)
+		$$->ic += "param _t" + to_string(i+2) + ";\n";	 
+	  $$->ic += string("lcall _") + string($1) + string(";\n");
+	  $$->ic += "popParams " + to_string(func_itr->para_type_list.size()) + ";\n";
+	  func_itr = f_end_iterator.end();
+          param_itr = p_end_iterator.end();	
+		f_name = ""; 
+
+}
+
+emp : {
+	assert(f_name == "");
+	f_name = $<str>-1;    
+}
+
+place_holder_list : expr{
+	assert(func_itr == f_end_iterator.end());
+	assert(param_itr == p_end_iterator.end());	
+	auto t_str = f_name;
+	func_itr = find_if(funcs.begin(), funcs.end(), [t_str](func f) -> bool {f.name == t_str;});
+	if(func_itr == funcs.end())
+		yyerror("No such function as " + t_str);
+	param_itr = func_itr->para_type_list.begin();
+	if(*param_itr != $1->type)
+		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
+	$$ = create();
+	$$->type = "void";
+	$$->ic = $1->ic;
+	$$->ic += "_t" + to_string( param_itr - func_itr->para_type_list.begin() + 2 ) + " = _t0;\n";
+	param_itr++;
+} |  expr COMMA place_holder_list  {
+	if(param_itr == func_itr->para_type_list.end())
+		yyerror("Too many parameters");
+	if(*param_itr != $1->type)
+		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
+	$$ = create();	
+	$$->type = "void";
+	$$->ic = $3->ic;
+	$$->ic += $1->ic;
+	$$->ic += "_t" + to_string( param_itr - func_itr->para_type_list.begin() + 2 ) + " = _t0;\n";
+	param_itr++;
 }
 
 return_stmt : RETURN IDENTIFIER COL {
-	$$ = create();
+	    $$ = create();
 	$$->type = sym_table.get($2);
 	$$->ic = "return " + string($2) + ";\n";
 }
 
 assignment : IDENTIFIER EQ expr COL {
-	if(!sym_table.find($1))
+	   if(!sym_table.find($1))
 		yyerror("No var named " + string($1) + " defined!!");
 	if($3->type != sym_table.get($1))
 		yyerror("Type mismatch!! Can't assign " + $3->type + " to " + sym_table.get($1) + ".");
@@ -160,17 +219,20 @@ assignment : IDENTIFIER EQ expr COL {
 	$$->ic += string($1) + " = _t0;\n"; 
 }
 struct_def : STRUCT IDENTIFIER OP_PARENS var_list CL_PARENS COL {
-	for(auto el: struct_sub_type){
-		cout<<el.first<<"   "<<el.second<<endl;
-	}	
-	cout<<"\n\n\n\n";
-	for(auto el: types){
-		cout<<el.first<<"   "<<el.second<<endl;
-	}
+	   //	   for(auto el: struct_sub_type){
+//		cout<<el.first<<"   "<<el.second<<endl;
+//	}	
+//	cout<<"\n\n\n\n";
+//	for(auto el: types){
+//		cout<<el.first<<"   "<<el.second<<endl;
+//	}
+	$$->type = $2;
+	$$->ic = "/No code put into struct/"; 
+
 }
 
 var_list : IDENTIFIER IDENTIFIER COL {
-	if(types.find($1) == types.end())
+	 if(types.find($1) == types.end())
 		yyerror("Undefined type.");
 	else {
 		struct_sub_type[string($<str>-1) + "." + string($2)] = $1; 
@@ -187,7 +249,7 @@ var_list : IDENTIFIER IDENTIFIER COL {
 }
 
 if_block : IF OP_BR expr COMPARATOR expr  CL_BR if_scope_prod OP_PARENS lines CL_PARENS {
-	$$ = create();
+	 $$ = create();
 	$$->type = $9->type;
 	string l1 = get_label();
 	$$->ic = $3->ic + "\n";
@@ -201,15 +263,15 @@ if_block : IF OP_BR expr COMPARATOR expr  CL_BR if_scope_prod OP_PARENS lines CL
 } 
 
 if_scope_prod : /* empty */ {
-	cur_scope--;	     
+	      cur_scope--;	     
 }
 
 loop_block : WHILE OP_BR expr COMPARATOR expr CL_BR while_scope_prod OP_PARENS lines CL_PARENS {
-	$$ = create();
+	   $$ = create();
 	$$->type = $9->type;
 	string l1 = get_label(), l2 = get_label();
 
-	$$->ic = l2 + ":\n";
+$$->ic = l2 + ":\n";
 	$$->ic += $3->ic + "\n";
 	$$->ic += "_t1 = _t0;\n";
 	$$->ic += $5->ic;	
@@ -222,11 +284,11 @@ loop_block : WHILE OP_BR expr COMPARATOR expr CL_BR while_scope_prod OP_PARENS l
 }
 
 while_scope_prod : /* empty */ {
-	cur_scope--;		 
+		 cur_scope--;		 
 }
 
 lines : line lines{
-	$$ = create();
+      $$ = create();
 	if($1->type == "void" and $2->type!="void")
 		$$->type = $2->type;
 	else if($2->type == "void" and $1->type!="void")
@@ -234,8 +296,8 @@ lines : line lines{
 	else if($2->type != $1->type)
 		yyerror("Return type mismatch!! " + string($1->type) + " and " + string($2->type) + ".");	
 	else $$->type = $1->type;
-	    
-	$$->ic = $1->ic +"\n" + $2->ic; 
+
+$$->ic = $1->ic +"\n" + $2->ic; 
 } | line {
 	$$ = create();
 	$$->type = $1->type;
@@ -243,7 +305,7 @@ lines : line lines{
 }
 
 decl : IDENTIFIER IDENTIFIER_LIST {
- if(types.find($1) == types.end())
+     if(types.find($1) == types.end())
 		yyerror("Undefined type.");   
 	$$ = $2;
 }
@@ -251,7 +313,7 @@ decl : IDENTIFIER IDENTIFIER_LIST {
 
 /*Not done */
 IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST {
-	if($3->type != $<str>0)
+		if($3->type != $<str>0)
 		yyerror("Type mismatched " + $3->type + "   " + $<str>0);		
 	sym_table.set($1, $<str>0);
 	$$ = create();
@@ -280,14 +342,14 @@ IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST {
 } 
 
 place_holder : IDENTIFIER {
-	strcpy($$, $1);
+	     strcpy($$, $1);
 }| constant{
 	strcpy($$, $1);
 } 
 /*   --- ND --- */
 
 expr: expr PLUS expr_l {
-	$$ = create();
+    $$ = create();
 	if($1->type != $3->type)
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
@@ -319,7 +381,7 @@ expr: expr PLUS expr_l {
 }
 
 expr_l : expr_l STAR expr_ll {
-	$$ = create();
+       $$ = create();
 	if($1->type != $3->type)
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
@@ -358,7 +420,7 @@ expr_ll : place_holder {
 /*sub_expr : place_holder STAR place_holder | place_holder DIVIDE place_holder | expr*/ 
 
 constant : REAL_VAL {
-strcpy($$, $1);		 
+	 strcpy($$, $1);		 
 }| INT_VAL {
 strcpy($$, $1);		 
 }| CONST_STR {
