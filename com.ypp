@@ -12,6 +12,7 @@
 #include<memory>
 
 #include "util.cpp"
+#include "gen_asm.cpp"
 
 using namespace std;
 
@@ -76,23 +77,27 @@ bool func_bool = false;
 %type <cs> return_stmt;
 %type <cs> struct_def;
 %type <cs> place_holder_list;
+%type <cs> program;
 %%
 
 program : program line {
-	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
+	$$->ic = string($1->ic) + string($2->ic);
+	ir = $$->ic;
 }| program function {
-	cout<<"IC--->\n\n"<<$2->ic<<"\n";       
+	$$->ic = string($1->ic) + string($2->ic);
+	ir = $$->ic;       
 }| line {
-	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
+	ir = $1->ic;
+	cout<<ir;
 }	| function {
-	cout<<"IC--->\n\n"<<$1->ic<<"\n";       
+	ir = $1->ic;
 }	
 
 
 function : IDENTIFIER IDENTIFIER OP_BR emp_f param_list CL_BR OP_PARENS lines CL_PARENS{
 	 if(types.find($1) == types.end())
 		yyerror("Unknown type " + string($1) + ". ");
-	if($8->type != $1)
+	if(!coercible($8->type, $1))
 		yyerror("Wrong return type!!");		
 	func temp_f = func();
 	temp_f.name = string($2);
@@ -106,15 +111,11 @@ function : IDENTIFIER IDENTIFIER OP_BR emp_f param_list CL_BR OP_PARENS lines CL
 	$$->ic += "func end;\n";		
 	sym_table.clear_scope();
 	cur_scope++;
-	for(auto el: temp_f.para_type_list){
-		cout<<el<<"   ";
-	}
 	func_bool = false;
 }
 
 emp_f : {
-      cout<<"Cahgned Scope\n";
-	cur_scope--;      
+      cur_scope--;      
 }
 
 param_list : param COMMA param_list{
@@ -128,8 +129,7 @@ param_list : param COMMA param_list{
 }
 
 param : IDENTIFIER IDENTIFIER {
-	cout<<"cur_scope->"<<cur_scope<<endl;
-	strcpy($$, $1);     
+      strcpy($$, $1);     
 	sym_table.set($2, $1); 
 }
 
@@ -144,7 +144,6 @@ line : decl COL{
 } | loop_block {
 	$$ = $1;
 } | struct_def{
-	cout<<$1->ic;
 	$$ = $1;
 } | assignment {
 	$$ = $1;
@@ -166,25 +165,25 @@ func_call : IDENTIFIER OP_BR emp place_holder_list CL_BR COL {
 	  $$->ic += string("lcall _") + string($1) + string(";\n");
 	  $$->ic += "popParams " + to_string(func_itr->para_type_list.size()) + ";\n";
 	  func_itr = f_end_iterator.end();
-          param_itr = p_end_iterator.end();	
+	  param_itr = p_end_iterator.end();	
 		f_name = ""; 
 
 }
 
 emp : {
-	assert(f_name == "");
+    assert(f_name == "");
 	f_name = $<str>-1;    
 }
 
 place_holder_list : expr{
-	assert(func_itr == f_end_iterator.end());
+		  assert(func_itr == f_end_iterator.end());
 	assert(param_itr == p_end_iterator.end());	
 	auto t_str = f_name;
 	func_itr = find_if(funcs.begin(), funcs.end(), [t_str](func f) -> bool {f.name == t_str;});
 	if(func_itr == funcs.end())
 		yyerror("No such function as " + t_str);
 	param_itr = func_itr->para_type_list.begin();
-	if(*param_itr != $1->type)
+	if(!coercible(*param_itr, $1->type))
 		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
 	$$ = create();
 	$$->type = "void";
@@ -194,7 +193,7 @@ place_holder_list : expr{
 } |  expr COMMA place_holder_list  {
 	if(param_itr == func_itr->para_type_list.end())
 		yyerror("Too many parameters");
-	if(*param_itr != $1->type)
+	if(!coercible(*param_itr, $1->type))
 		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
 	$$ = create();	
 	$$->type = "void";
@@ -213,7 +212,7 @@ return_stmt : RETURN IDENTIFIER COL {
 assignment : IDENTIFIER EQ expr COL {
 	   if(!sym_table.find($1))
 		yyerror("No var named " + string($1) + " defined!!");
-	if($3->type != sym_table.get($1))
+	if(!coercible($3->type, sym_table.get($1)))
 		yyerror("Type mismatch!! Can't assign " + $3->type + " to " + sym_table.get($1) + ".");
 	$$ = create();	
 	$$->type = "void";
@@ -297,7 +296,7 @@ lines : line lines{
 		$$->type = $2->type;
 	else if($2->type == "void" and $1->type!="void")
 		$$->type = $1->type;
-	else if($2->type != $1->type)
+	else if(!coercible($2->type, $1->type))
 		yyerror("Return type mismatch!! " + string($1->type) + " and " + string($2->type) + ".");	
 	else $$->type = $1->type;
 
@@ -323,26 +322,26 @@ IDENTIFIER_LIST : IDENTIFIER EQ expr COMMA IDENTIFIER_LIST {
 	$$ = create();
 	$$->type = $<str>0;
 	$$->ic = $3->ic;
-	$$->ic += string($1) + " = _t0;\n";
+	$$->ic += scoped_name(string($1)) + " = _t0;\n";
 	$$->ic += $5->ic + "\n"; 
 }| IDENTIFIER COMMA IDENTIFIER_LIST{
 	sym_table.set($1, $<str>0);
 	$$ = create();
 	$$->type = $<str>0;
-	$$->ic = string($1) +  " = 0;\n";
+	$$->ic = scoped_name(string($1)) +  " = 0;\n";
 	$$->ic += $3->ic + "\n";	
 }  | IDENTIFIER EQ expr{
-	if($3->type != $<str>0)
+	if(!coercible($3->type, $<str>0))
 		yyerror("Type mismatched " + $3->type + "   " + $<str>0);		
 	sym_table.set($1, $<str>0);
 	$$ = create();
 	$$->type = $<str>0;
 	$$->ic = $3->ic;
-	$$->ic += string($1) + " = _t0;\n";
+	$$->ic += scoped_name(string($1)) + " = _t0;\n";
 } | IDENTIFIER { sym_table.set($1, $<str>0);
 	$$ = create();
 	$$->type = $<str>0;
-	$$->ic = string($1) + " = 0;\n";
+	$$->ic = scoped_name(string($1)) + " = 0;\n";
 } 
 
 place_holder : IDENTIFIER {
@@ -354,7 +353,7 @@ place_holder : IDENTIFIER {
 
 expr: expr PLUS expr_l {
     $$ = create();
-	if($1->type != $3->type)
+	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
@@ -364,7 +363,7 @@ expr: expr PLUS expr_l {
 	$$->ic = temp;
 }| expr MINUS expr_l {
 	$$ = create();
-	if($1->type != $3->type)
+	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
@@ -386,7 +385,7 @@ expr: expr PLUS expr_l {
 
 expr_l : expr_l STAR expr_ll {
        $$ = create();
-	if($1->type != $3->type)
+	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
@@ -396,7 +395,7 @@ expr_l : expr_l STAR expr_ll {
 	$$->ic = temp;
 }| expr_l DIVIDE expr_ll {
 	$$ = create();
-	if($1->type != $3->type)
+	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
@@ -434,7 +433,12 @@ strcpy($$, $1);
 int main(){
 	global_addr = 0;	
 	types_init();
-	return yyparse();
+	if(yyparse())
+		cout<<"\e[0;31mCompilation failed!!\n";
+	cout<<"\n\n"<<ir;
+//	else gen_assembly(ir);
+	cout<<"YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n";	
+return 0;
 }
 void yywrap(void) {
 	return;

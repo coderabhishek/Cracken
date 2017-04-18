@@ -3,7 +3,6 @@
 #include<vector>
 #include<set>
 #include<map>
-#include<string>
 #include<string.h>
 #include<stdio.h>
 #include<stack>
@@ -16,6 +15,10 @@ void yyerror(string);
 
 int cur_scope = 0;
 
+string ir = "";
+
+map<string, int> addr_table;
+
 struct code_segment{
 	string ic, type, jit, jif, start;
 };
@@ -23,6 +26,14 @@ struct code_segment{
 map<string, string> struct_sub_type;
 
 string start_label = "L1";
+
+bool coercible(string t1, string t2){
+	if(t1 == t2)
+		return true;
+	if((t1 == "float" and t2 == "int") || (t1 == "int" and t2 == "float"))
+		return true;
+	return false;
+}
 
 string get_label(){
 	auto t = start_label;
@@ -36,6 +47,10 @@ string get_label(){
 		start_label.push_back('1');
 	}
 	return t;
+}
+
+string scoped_name(string s){
+	return s + "_" + to_string(cur_scope);
 }
 
 int ic_var_num = 2; // _to and _t1 are reserved for temp expr evaluation
@@ -72,7 +87,7 @@ code_segment *create(){
 stack<string> scope;
 
 map<string, int> types;
-int global_addr = 0;
+int global_addr = 9000;
 
 int get_addr(string t){
 
@@ -101,11 +116,13 @@ class sym_table_cl{
 		void set(string name, string type){
 			assert(sym_tab[name].empty() or sym_tab[name].top().first >= cur_scope);
 			if(!sym_tab[name].empty() and  sym_tab[name].top().first == cur_scope){
-				cout<<"ASGASFGASDGASGSAGASDFGASDFGASDFGADFG\n\n";
 				yyerror("Variable already declared!!");	
 			}
 
 			sym_tab[name].push(make_pair(cur_scope, type));
+			addr_table[scoped_name(name)] = global_addr;
+			global_addr += types[type];
+			cout<<"Remark: Bound "<<name<<" to "<<addr_table[scoped_name(name)]<<endl;
 		}	
 
 		string get(string name){
@@ -187,7 +204,6 @@ string find_type(string s){
 		if(struct_sub_type.find(t + "." + temp) == struct_sub_type.end())
 			yyerror("Unknown member!!");
 		t = struct_sub_type[t + "." + temp];
-		cout<<"Type of "<<s<<"   "<<t<<endl;
 		return t;
 	}
 	if(!sym_table.find(s)){
