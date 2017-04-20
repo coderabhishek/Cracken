@@ -19,6 +19,10 @@ string ir = "";
 
 map<string, int> addr_table;
 
+struct dimension_list{
+	vector<string> v;
+};
+
 struct code_segment{
 	string ic, type, jit, jif, start;
 };
@@ -49,9 +53,6 @@ string get_label(){
 	return t;
 }
 
-string scoped_name(string s){
-	return s + "_" + to_string(cur_scope);
-}
 
 int ic_var_num = 2; // _to and _t1 are reserved for temp expr evaluation
 
@@ -108,36 +109,45 @@ class sym_table_cl{
 			static sym_table_cl sym_table;
 			return sym_table;
 		}
+		
+		int most_recent_scope(string name){
+			if(sym_tab[name].empty()){
+				yyerror("Unknown variable or expression");
+			}
+			return sym_tab[name].top().first;
+		}
 
 		bool find(string name){
-			return (sym_tab.find(name) != sym_tab.end());
+			return (!sym_tab[name].empty());
 		}
 
 		void set(string name, string type){
-			assert(sym_tab[name].empty() or sym_tab[name].top().first >= cur_scope);
+			assert(sym_tab[name].empty() or sym_tab[name].top().first <= cur_scope);
 			if(!sym_tab[name].empty() and  sym_tab[name].top().first == cur_scope){
 				yyerror("Variable already declared!!");	
-			}
-
+				return;
+			}	
 			sym_tab[name].push(make_pair(cur_scope, type));
-			addr_table[scoped_name(name)] = global_addr;
+			addr_table[name + "_" + to_string(cur_scope)] = global_addr;
 			global_addr += types[type];
-			cout<<"Remark: Bound "<<name<<" to "<<addr_table[scoped_name(name)]<<endl;
 		}	
 
 		string get(string name){
-			if(sym_tab.find(name) != sym_tab.end())
+			if(!sym_tab[name].empty()){
+				assert(!sym_tab[name].empty());
 				return sym_tab[name].top().second;
+			}
 			yyerror("No variable named " + name);
 		}
 
 		void clear_scope(){
 			for(auto it = sym_tab.begin();it!=sym_tab.end();++it){
-				assert(it->second.top().first >= cur_scope);
+				assert(it->second.top().first <= cur_scope);
 				if(it->second.top().first == cur_scope){
 					(it->second).pop();
 				}
 			}
+			cur_scope--;
 		}
 
 };
@@ -238,6 +248,11 @@ int size_of_param_frame(vector<string> &v){
 	return res;
 }
 
+string scoped_name(string s){
+	return s + "_" + to_string(sym_table.most_recent_scope(s));
+}
+
+string mips_asm;
 string f_name;
 vector<string> p_end_iterator;
 vector<func> f_end_iterator;

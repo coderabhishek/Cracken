@@ -20,7 +20,6 @@
 "," { return COMMA; }
 "if" { return IF; }
 "else" { return ELSE; }
-"elseif" { return ELSEIF; }
 "while" { return WHILE; }
 "struct" { return STRUCT; }
 "return" { return RETURN; }
