@@ -29,7 +29,7 @@ int yylex();
 void yywrap();
 #define max_tab_size 1000
 int size[max_tab_size];
-
+string declaration_type;
 
 bool func_bool = false;
 %}
@@ -46,6 +46,8 @@ bool func_bool = false;
 %token IF;
 %token ELSE;
 %token ELSEIF;
+%token T_COL;
+%token AMP;
 %token WHILE;
 %token EQ;
 %token COMMA;
@@ -91,11 +93,8 @@ program : program line {
 	$$->ic = string($1->ic) + string($2->ic);
 	ir = $$->ic;
 	
-	cout<<"\n\n"<<ir<<"\n\n";
 }| line {
-	ir = $1->ic;
-	
-	cout<<"\n\n"<<ir<<"\n\n";
+	ir = $1->ic;	
 } | program error 
 
 
@@ -228,7 +227,6 @@ assignment : IDENTIFIER EQ expr COL {
 } | array EQ array COL {
 	$$ = create();
 	auto arg1 = string($1), arg2 = string($3);
-	cout<<"ASSignment :"<<arg1<<"     "<<arg2<<endl;
 	string basic_type1, basic_type2, name1, name2;
 	size_t i = arg1.find('#');
 	for(int j = i+1;j!=arg1.size();++j)
@@ -237,7 +235,6 @@ assignment : IDENTIFIER EQ expr COL {
 	for(int j = i+1;j!=arg2.size();++j)
 		name2.push_back(arg2[j]);
 
-	cout<<"Names 1 2--> " <<name1<<"   "<<name2<<endl;
 	for(auto el: $1)
 	{
 		if(el == '_')
@@ -253,7 +250,6 @@ assignment : IDENTIFIER EQ expr COL {
 	if(basic_type1 != basic_type2)
 		yyerror("Array type mismatch!!");
 	string t1 = sym_table.get(name1), t2 = sym_table.get(name2);
-	cout<<name1<<"   "<<t1<<"     --------      "<<name2<<"   "<<t2<<"\n\n";		
 	if(count(t1.begin(), t1.end(), '_') - count(arg1.begin(), arg1.end(), '_') != count(t2.begin(), t2.end(), '_') - count(arg2.begin(), arg2.end(), '_'))
 		yyerror("Array dimensions mismatch!!");
 	$$->type = "void";
@@ -266,14 +262,12 @@ array : IDENTIFIER dim_list {
 		yyerror(string($1) + " not found!!");
 	
 	string type = sym_table.get($1);
-	cout<<"Type--> "<<type<<"\n\n";
 	string temp;
 	for(int i = 0;type[i]!='_';++i)
 		temp.push_back(type[i]);
 
 	for(auto el: $2->v)
 		temp += "_" + el;
-	cout<<"My type "<<temp<<endl<<endl;
 	int i =0;
 	while(type[i]!='_')
 		i++;
@@ -284,7 +278,6 @@ array : IDENTIFIER dim_list {
 			it.push_back(type[i++]);
 		i++;	
 		if(!(i<type.size()) or stoi(el) >= stoi(it)){	
-			cout<<"ERROR   "<<stoi(el)<<"     "<<stoi(it)<<endl;
 			yyerror("Inconsistent dimensions!!");	
 			break;	
 		}
@@ -401,10 +394,16 @@ $$->ic = $1->ic +"\n" + $2->ic;
 	$$->ic = "";
 }  
 
-decl : IDENTIFIER IDENTIFIER_LIST {
+decl : IDENTIFIER T_COL decl_type IDENTIFIER_LIST {
      if(types.find($1) == types.end())
 		yyerror("Undefined type.");   
-	$$ = $2;
+	$$ = $4;
+	declaration_type.clear();
+}
+
+decl_type : /* empty */ {
+	assert(declaration_type.empty());
+	declaration_type = string($<str>0);	  
 }
 
 specifier : STAR {
@@ -413,42 +412,81 @@ specifier : STAR {
 
 
 /*Not done */
-IDENTIFIER_LIST : specifier IDENTIFIER EQ expr COMMA IDENTIFIER_LIST {
-	if($4->type != $<str>0)
-		yyerror("Type mismatched " + $4->type + "   " + $<str>0);		
-	sym_table.set($2, $<str>0);
+IDENTIFIER_LIST : IDENTIFIER_LIST COMMA specifier IDENTIFIER EQ expr {
+	if($6->type != "p_" + declaration_type)
+		yyerror("Type mismatched " + $6->type + "   " + "p_" + declaration_type);		
+	sym_table.set($4, "p_" + declaration_type);
 	$$ = create();
-	$$->type = $<str>0;
-	$$->ic = $4->ic;
-	$$->ic += scoped_name(string($2)) + " = _t0;#eq\n";
-	$$->ic += $6->ic + "\n"; 
-}| specifier IDENTIFIER COMMA IDENTIFIER_LIST{
-	sym_table.set($2, $<str>0);
+	$$->type = "p_" + declaration_type;
+	$$->ic = $6->ic;
+	$$->ic += scoped_name(string($4)) + " = _t0;#eq\n";
+	$$->ic += $1->ic + "\n"; 
+}| IDENTIFIER_LIST COMMA specifier IDENTIFIER{
+	sym_table.set($4, "p_" + declaration_type);
 	$$ = create();
-	$$->type = $<str>0;
-	$$->ic = scoped_name(string($2)) +  " = 0;#eq\n";
-	$$->ic += $4->ic + "\n";	
+	$$->type = "p_" + declaration_type;
+	$$->ic = scoped_name(string($4)) +  " = 0;#eq\n";
+	$$->ic += $1->ic + "\n";	
 }  |specifier IDENTIFIER EQ expr{
-	if(!coercible($4->type, $<str>0))
-		yyerror("Type mismatched " + $4->type + "   " + $<str>0);		
-	sym_table.set($2, $<str>0);
+	if(!coercible($4->type, "p_" + declaration_type))
+		yyerror("Type mismatched " + $4->type + "   " + "p_" + declaration_type);		
+	sym_table.set($2, "p_" + declaration_type);
 	$$ = create();
-	$$->type = $<str>0;
+	$$->type = "p_" + declaration_type;
 	$$->ic = $4->ic;
 	$$->ic += scoped_name(string($2)) + " = _t0;#eq\n";
-} |specifier IDENTIFIER { sym_table.set($2, $<str>0);
+} |specifier IDENTIFIER { sym_table.set($2, "p_" + declaration_type);
 	$$ = create();
-	$$->type = $<str>0;
+	$$->type = "p_" + declaration_type;
 	$$->ic = scoped_name(string($2)) + " = 0;#eq\n";
-} | IDENTIFIER dim_list {
+} | IDENTIFIER_LIST COMMA IDENTIFIER EQ expr {
+	if($5->type != declaration_type)
+		yyerror("Type mismatched " + $5->type + "   " + declaration_type);		
+	sym_table.set($3, declaration_type);
 	$$ = create();
+	$$->type = declaration_type;
+	$$->ic = $5->ic;
+	$$->ic += scoped_name(string($3)) + " = _t0;#eq\n";
+	$$->ic += $1->ic + "\n"; 
+}| IDENTIFIER_LIST COMMA IDENTIFIER {
+	sym_table.set($3, declaration_type);
+	$$ = create();
+	$$->type = declaration_type;
+	$$->ic = scoped_name(string($3)) +  " = 0;#eq\n";
+	$$->ic += $1->ic + "\n";	
+}  |IDENTIFIER EQ expr{
+	if(!coercible($3->type, declaration_type))
+		yyerror("Type mismatched " + $3->type + "   " + declaration_type);		
+	sym_table.set($1, declaration_type);
+	$$ = create();
+	$$->type = declaration_type;
+	$$->ic = $3->ic;
+	$$->ic += scoped_name(string($1)) + " = _t0;#eq\n";
+} | IDENTIFIER { sym_table.set($1, declaration_type);
+	$$ = create();
+	$$->type = declaration_type;
+	$$->ic = scoped_name(string($1)) + " = 0;#eq\n";
+}|IDENTIFIER_LIST COMMA  IDENTIFIER dim_list {
+	$$ = create();
+	string temp = "";
+	for(auto el: $4->v){
+		temp += "_" + el;
+	}
+	sym_table.set($3, string(declaration_type) + temp);
+	$$->type = declaration_type;
+	int t_size=1;
+	for(auto el: $4->v)
+		t_size *= stoi(el); 
+	$$->ic = "alloc " + string($3) + "  " + to_string(t_size) + ";\n";
+	$$->ic += $1->ic;
+} | IDENTIFIER dim_list {
+		$$ = create();
 	string temp = "";
 	for(auto el: $2->v){
 		temp += "_" + el;
 	}
-	cout<<"Setting type "<<$1<<"     "<<string($<str>0) + temp<<"\n\n";
-	sym_table.set($1, string($<str>0) + temp);
-	$$->type = $<str>0;
+	sym_table.set($1, string(declaration_type) + temp);
+	$$->type = declaration_type;
 	int t_size=1;
 	for(auto el: $2->v)
 		t_size *= stoi(el); 
@@ -475,6 +513,12 @@ place_holder : IDENTIFIER {
 	     strcpy($$, $1);
 }| constant{
 	strcpy($$, $1);
+} | AMP IDENTIFIER {
+	strcpy($$, "&");
+	strcat($$, $2);
+} | STAR IDENTIFIER {
+	strcpy($$, "*");
+	strcat($$, $2);
 } 
 /*   --- ND --- */
 
@@ -508,7 +552,7 @@ expr: expr PLUS expr_l {
 	$$->type = $2->type;
 	string temp = $2->ic + "\n";
 	$$->ic = temp;
-}
+} 
 
 expr_l : expr_l STAR expr_ll {
        $$ = create();

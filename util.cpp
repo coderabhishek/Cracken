@@ -109,10 +109,10 @@ class sym_table_cl{
 			static sym_table_cl sym_table;
 			return sym_table;
 		}
-		
+
 		int most_recent_scope(string name){
 			if(sym_tab[name].empty()){
-				yyerror("Unknown variable or expression");
+				yyerror("Unknown variable or expression  " + name);
 			}
 			return sym_tab[name].top().first;
 		}
@@ -181,6 +181,21 @@ string get_complex_type(string basic_type){
 
 
 string find_type(string s){
+	cout<<"FIND TYPE  ->  "<<s<<endl;
+	if(s[0] == '*'){
+		s.erase(s.begin());
+		auto res = find_type(s);
+		if(res.size()>2 and res[0]=='p' and res[1]=='_'){
+			res.erase(res.begin());
+			res.erase(res.begin());
+		}	
+		else yyerror("Dereferencing a non-pointer type");
+		return res;
+	}
+	if(s[0] == '&'){
+		s.erase(s.begin());
+		return "p_" + find_type(s);
+	}
 	if(isdigit(s[0]))
 	{
 		if(s.find(".") == string::npos)
@@ -249,6 +264,14 @@ int size_of_param_frame(vector<string> &v){
 }
 
 string scoped_name(string s){
+	if(s[0] == '&'){
+		s.erase(s.begin());
+		return "&" + scoped_name(s);
+	}
+	if(s[0] == '*'){
+		s.erase(s.begin());
+		return "*" + scoped_name(s);
+	}
 	return s + "_" + to_string(sym_table.most_recent_scope(s));
 }
 
