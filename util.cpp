@@ -185,7 +185,7 @@ void sym_table_cl::render(){
 		if(el.second.empty())
 			continue;
 		cout<<el.first<<":\n";
-		cout<<ident<<el.second.top().first<<"  "<<el.second.top().second<<"\n";
+		cout<<ident<<el.second.top().second<<"  "<<types.get(el.second.top().second)<<"\n";
 		cout<<"\n\n";
 	}
 }
