@@ -23,7 +23,6 @@ using namespace std;
 #define YYDEBUG 1
 extern char *yytext;
 extern int yylineno;
-
 bool parser_failed = false;
 
 void yyerror(string);
@@ -57,6 +56,7 @@ bool func_bool = false;
 %token DIVIDE;
 %token PLUS;
 %token MINUS;
+%token DEREF;
 %token STRUCT;
 %token RETURN;
 %token <str> TYPE;
@@ -69,6 +69,7 @@ bool func_bool = false;
 %type <cs> expr; 
 %type <cs> expr_l;
 %type <cs> assignment;
+%type <cs> prep;
 %type <cs> lines;
 %type <cs> line;
 %type <str> specifier;
@@ -99,25 +100,35 @@ program : program line {
 	ir = $1->ic;	
 } | program error 
 
-
-function : IDENTIFIER IDENTIFIER OP_BR emp_f param_list CL_BR OP_PARENS lines CL_PARENS{
-	 if(types.find($1) == types.end())
-		yyerror("Unknown type " + string($1) + ". ");
-	if(!coercible($8->type, $1))
-		yyerror("Wrong return type!!");		
-	func temp_f = func();
-	temp_f.name = string($2);
-	temp_f.r_type = string($1);
-	temp_f.para_type_list = $5->v; 
-	funcs.push_back(temp_f);
-	$$ = create();
-	$$->type = $1;
-	$$->ic = "begfunc " + string($2) + to_string(size_of_param_frame(temp_f.para_type_list)) + ";\n";
-	$$->ic += $8->ic;
+//           6          5          4    3      2         1        0
+function : IDENTIFIER IDENTIFIER OP_BR emp_f param_list CL_BR OP_PARENS prep lines CL_PARENS{
+	$$ = $8;
+	if(!coercible(string($1), $9->type))
+		yyerror("Wrong return type!\n");
+	$$->ic += $9->ic;
 	$$->ic += "func end;\n";		
 	sym_table.clear_scope();
 	func_bool = false;
 }
+
+prep : {
+	 if(types.find($<str>-6) == types.end())
+		yyerror("Unknown type " + string($<str>-6) + ". ");
+	func temp_f = func();
+	temp_f.name = string($<str>-5);
+	temp_f.r_type = string($<str>-6);
+	int reg_num = 1;
+		
+	$$ = create();
+	$$->type = $<str>-6;
+	$$->ic = "begfunc " + string($<str>-5) + ";\n";
+	for(auto el: ($<pl>-2)->v){
+		temp_f.para_type_list.push_back(el.second);
+		$$->ic += scoped_name(el.first) + " = " + "_s" + to_string(reg_num++) + ";#eq\n"; 	
+	}	
+	funcs.push_back(temp_f);
+}
+
 
 emp_f : {
       cur_scope++;      
@@ -125,16 +136,35 @@ emp_f : {
 
 param_list : param COMMA param_list{
 	   $$ = $3;
-	$$->v.push_back(string($1));	
+	string name, type, given = $1;
+	int i = 0;
+	while(given[i]!=' ')
+		type.push_back(given[i++]);
+	i++;
+	while(i<given.size())
+		name.push_back(given[i++]);
+		
+	$$->v.push_back(make_pair(name, type));	
 } | param {
-	vector<string> v = {string($1)};
+	string name, type, given = $1;
+	int i = 0;
+	while(given[i]!=' ')
+		type.push_back(given[i++]);
+	i++;
+	while(i<given.size())
+		name.push_back(given[i++]);
+		
+	
+	auto v = {make_pair(name, type)};
 	$$ = new param_list();
 	$$->v = v;
 
 }
 
 param : IDENTIFIER IDENTIFIER {
-      strcpy($$, $1);     
+      strcpy($$, $1);
+	strcat($$, " ");
+	strcat($$, $2);     
 	sym_table.set($2, $1); 
 }
 
@@ -156,24 +186,24 @@ line : function {
 	$$ = $1;
 } | return_stmt {
 	$$ = $1;
-} | func_call {
+} | func_call COL {
 	$$ = $1;
 }
 
-func_call : IDENTIFIER OP_BR emp place_holder_list CL_BR COL {
+func_call : IDENTIFIER OP_BR emp place_holder_list CL_BR {
 	  string ts = $1; 
 	  if(func_itr->para_type_list.end() != param_itr)
 		yyerror("Too few parameters");
 	  $$ = create();
 	  $$->type = func_itr->r_type;
 	  $$->ic = $4->ic;
-	  for(int i=0;i<func_itr->para_type_list.size();++i)
-		$$->ic += "param _t" + to_string(i+2) + ";\n";	 
-	  $$->ic += string("lcall _") + string($1) + string(";\n");
-	  $$->ic += "popParams " + to_string(func_itr->para_type_list.size()) + ";\n";
+	
+	for(int i=0;i<func_itr->para_type_list.size();++i)
+		$$->ic += "param _s" + to_string(i+2) + ";\n";	 
+  $$->ic += string("lcall ") + string($1) + string(";\n");
 	  func_itr = f_end_iterator.end();
 	  param_itr = p_end_iterator.end();	
-		f_name = ""; 
+		f_name = "";
 
 }
 
@@ -194,8 +224,9 @@ place_holder_list : expr{
 		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
 	$$ = create();
 	$$->type = "void";
-	$$->ic = $1->ic;
-	$$->ic += "_t0" + to_string( param_itr - func_itr->para_type_list.begin() + 2 ) + " = _t0;#eq\n";
+	$$->ic = "stack_vars;\n";
+	$$->ic += $1->ic;
+	$$->ic += "_s" + to_string( param_itr - func_itr->para_type_list.begin() + 1 ) + " = _t0;#eq\n";
 	param_itr++;
 } |  expr COMMA place_holder_list  {
 	if(param_itr == func_itr->para_type_list.end())
@@ -206,12 +237,12 @@ place_holder_list : expr{
 	$$->type = "void";
 	$$->ic = $3->ic;
 	$$->ic += $1->ic;
-	$$->ic += "_t0" + to_string( param_itr - func_itr->para_type_list.begin() + 2 ) + " = _t0;#eq\n";
+	$$->ic += "_s" + to_string( param_itr - func_itr->para_type_list.begin() + 1 ) + " = _t0;#eq\n";
 	param_itr++;
 }
 
 return_stmt : RETURN expr COL {
-	    $$ = create();
+    $$ = create();
 	$$->type = $2->type;
 	$$->ic = $2->ic;
 	$$->ic += "return _t0;\n";
@@ -385,6 +416,7 @@ if_scope_prod : /* empty */ {
 
 close_scope : /* empty */ {
 	    sym_table.clear_scope();	    
+	cur_scope++;
 }
 loop_block : WHILE OP_BR expr COMPARATOR expr CL_BR while_scope_prod OP_PARENS lines CL_PARENS {
 	   $$ = create();
@@ -436,8 +468,8 @@ decl_type : /* empty */ {
 	declaration_type = string($<str>0);	  
 }
 
-specifier : STAR {
-	  strcpy($$, "*");	  
+specifier : DEREF {
+	  strcpy($$, "^");	  
 }
 
 
@@ -530,11 +562,8 @@ IDENTIFIER_LIST : IDENTIFIER_LIST COMMA specifier IDENTIFIER EQ expr {
 	}
 //	$$->ic = "alloc " + scoped_name(string($1)) + "  " + to_string(t_size*types[$$->type]) + ";\n";
 	addr_table[scoped_name($1)] = t_size*types.get($$->type);
-	cout<<"\n==========================\n\n";
 	
 	types.set(ch, t_size*types.get($$->type)); 
-	for(auto el: types.types_l)
-		cout<<el.first<<"   "<<el.second<<endl;	
 }
 
 dim_list : dim_list OP_SQBR INT_VAL CL_SQBR {
@@ -560,7 +589,7 @@ place_holder : IDENTIFIER {
 } | AMP IDENTIFIER {
 	strcpy($$, "&");
 	strcat($$, $2);
-} | STAR IDENTIFIER {
+} | DEREF IDENTIFIER {
 	strcpy($$, "*");
 	strcat($$, $2);
 } | IDENTIFIER dim_list {
@@ -574,13 +603,14 @@ place_holder : IDENTIFIER {
 /*   --- ND --- */
 
 expr: expr PLUS expr_l {
-    $$ = create();
+	$$ = create();
 	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
-	temp += "_t1 = _t0;#eq\n";
+	temp += "pusht0\n";
 	temp += $3->ic + "\n";
+	temp += "popt0\n";
 	temp += "_t0 = _t1 + _t0;   #eop--+\n";
 	$$->ic = temp;
 }| expr MINUS expr_l {
@@ -589,8 +619,9 @@ expr: expr PLUS expr_l {
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
-	temp += "_t1 = _t0;#eq\n";
+	temp += "pusht0\n";
 	temp += $3->ic + "\n";
+	temp += "popt0\n";
 	temp += "_t0 = _t1 - _t0;  #eop---\n";
 	$$->ic = temp;
 }| expr_l {
@@ -603,16 +634,18 @@ expr: expr PLUS expr_l {
 	$$->type = $2->type;
 	string temp = $2->ic + "\n";
 	$$->ic = temp;
-} 
+}
 
 expr_l : expr_l STAR expr_ll {
-       $$ = create();
+       cout<<"YAYTYYYYYY\n";
+	$$ = create();
 	if(!coercible($1->type, $3->type))
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
-	temp += "_t1 = _t0;#eq\n";
+	temp += "pusht0\n";
 	temp += $3->ic + "\n";
+	temp += "popt0\n";
 	temp += "_t0 = _t1 * _t0;  #eop--*\n";
 	$$->ic = temp;
 }| expr_l DIVIDE expr_ll {
@@ -621,8 +654,9 @@ expr_l : expr_l STAR expr_ll {
 		yyerror("Type Mismatch!!");
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
-	temp += "_t1 = _t0;#eq\n";
+	temp += "pusht0\n";
 	temp += $3->ic + "\n";
+	temp += "popt0\n";
 	temp += "_t0 = _t1 / _t0;  #eop--/\n";
 	$$->ic = temp;
 }| expr_ll  {
@@ -635,7 +669,14 @@ expr_ll : place_holder {
 	if(isdigit($1[0]) || $1[0]=='\'')
 	$$->ic = "_t0 = " + string($1) + ";#eq\n";
 	else $$->ic = "_t0 = " + scoped_name(string($1)) + ";#eq\n";
-}  
+} | func_call {
+	$$ = create();
+	$$->type = $1->type;
+	$$->ic += $1->ic;
+	$$->ic += "_t0 = _t7;#eq\n";
+} 
+
+ 
 
 
 
@@ -655,10 +696,18 @@ strcpy($$, $1);
 }
 %%
 int main(int argc, char *argv[]){
-	string file_name("name.c");
+//	yydebug = 1;
+if(argc < 2){
+		cout<<"\e[0;31mNO FILE\n";
+		return 0;
+	}
+	string file_name(argv[1]);
+	freopen(file_name.c_str(),"r",stdin);
+	if(file_name.find(".") != string::npos){
 	while(*(file_name.end()-1)!='.')
 		file_name.pop_back();
 	file_name.pop_back();
+	}
 	cout<<"Compiling file "<<file_name<<endl;
 	ofstream asm_file, ir_file; 	
 	asm_file.open(file_name + ".asm");
@@ -671,7 +720,7 @@ int main(int argc, char *argv[]){
 		string mips_asm = gen_assembly(ir);
 		asm_file<<mips_asm;
 		ir_file<<ir;
-		cout<<"\nCompiled Successfully!!\n";
+		cout<<"\n\033[0;34mCompiled Successfully!!\033[0m\n";
 		sym_table.render();
 		cout<<"\n\nAll variables according to sizes:\n";
 		for(auto el: addr_table){

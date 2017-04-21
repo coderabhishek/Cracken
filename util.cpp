@@ -328,7 +328,7 @@ struct func{
 };
 
 struct param_list{
-	vector<string> v;
+	vector< pair<string, string> > v;
 };
 vector<func> funcs;
 

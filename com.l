@@ -13,6 +13,7 @@
 ")" { return CL_BR; }
 "[" { return OP_SQBR; }
 "]" { return CL_SQBR; }
+"^" { return DEREF; }
 "+" { return PLUS; }
 "-" { return MINUS; }
 "*" { return STAR; }
@@ -32,6 +33,6 @@
 
 [a-zA-Z]+[a-zA-Z0-9_.]* { strcpy(yylval.str, yytext); return IDENTIFIER; }
 [0-9]+	{ strcpy(yylval.str, yytext); return INT_VAL; }
-[0-9]+.[0-9]+ {strcpy(yylval.str, yytext); return REAL_VAL; }
+[0-9]+\.[0-9]+ {strcpy(yylval.str, yytext); return REAL_VAL; }
 
 [ \t\n] {;}
