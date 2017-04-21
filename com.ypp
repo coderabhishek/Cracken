@@ -1,12 +1,14 @@
 %{
 #include<iostream>
 #include<algorithm>
+#include<ostream>
 #include<vector>
 #include<set>
 #include<map>
 #include<string>
 #include<string.h>
 #include<stdlib.h>
+#include<fstream>
 #include<stdio.h>
 #include<stack>
 #include<stdlib.h>
@@ -216,10 +218,8 @@ return_stmt : RETURN expr COL {
 }
 
 assignment : IDENTIFIER EQ expr COL {
-	if(!sym_table.find($1))
-		yyerror("No var named " + string($1) + " defined!!");
-	if(!coercible($3->type, sym_table.get($1)))
-		yyerror("Type mismatch!! Can't assign " + $3->type + " to " + sym_table.get($1) + ".");
+	if(!coercible($3->type, find_type($1)))
+		yyerror("Type mismatch!! Can't assign " + $3->type + " to " + find_type($1) + ".");
 	$$ = create();	
 	$$->type = "void";
 	$$->ic = $3->ic;
@@ -249,19 +249,40 @@ assignment : IDENTIFIER EQ expr COL {
 	}	
 	if(basic_type1 != basic_type2)
 		yyerror("Array type mismatch!!");
-	string t1 = sym_table.get(name1), t2 = sym_table.get(name2);
+	string t1 = find_type(name1), t2 = find_type(name2);
 	if(count(t1.begin(), t1.end(), '_') - count(arg1.begin(), arg1.end(), '_') != count(t2.begin(), t2.end(), '_') - count(arg2.begin(), arg2.end(), '_'))
 		yyerror("Array dimensions mismatch!!");
 	$$->type = "void";
 	$$->ic = "_t0 = _t1";	
-}
+} | IDENTIFIER dim_list EQ expr COL {
+	string subject($1);
+	for(auto el: $2->v){
+		subject.push_back('[');
+		subject.append(el);
+		subject.push_back(']');
+	}
+	string t = find_type(subject);
+	if(!coercible(t, $4->type))
+		yyerror("Type mismatch " + t + "  " + $4->type);
+	$$ = create();
+	$$->type = t;
+	$$->ic = $4->ic;
+	$$->ic += scoped_name(subject)  + " = _t0;#eq\n";
+} 
+
+/* | array EQ expr {
+	$$ = create();
+	cout<<"Array with expr is --> "<<$1<<"\n\n";
+	string s($1);
+	s.replace('_', "][");
+}*/
 
 array : IDENTIFIER dim_list {
 
 	if(!sym_table.find($1))
 		yyerror(string($1) + " not found!!");
 	
-	string type = sym_table.get($1);
+	string type = find_type($1);
 	string temp;
 	for(int i = 0;type[i]!='_';++i)
 		temp.push_back(type[i]);
@@ -299,25 +320,27 @@ struct_def : STRUCT IDENTIFIER OP_PARENS var_list CL_PARENS COL {
 //	}
 	$$ = create();
 	$$->type = $2;
-	$$->ic = "/No code put into struct/"; 
+	$$->ic = ""; 
 
 }
 
-var_list : IDENTIFIER IDENTIFIER COL {
+var_list : IDENTIFIER T_COL IDENTIFIER COL {
 	 if(types.find($1) == types.end())
 		yyerror("Undefined type.");
 	else {
-		struct_sub_type[string($<str>-1) + "." + string($2)] = $1; 
+		struct_sub_type[string($<str>-1) + "." + string($3)] = $1; 
 	}
-	types[$<str>-1] += types[$1];
+	types.set(string($<str>-1), types.get(string($<str>-1)) + types.get($1));
 }
-| IDENTIFIER IDENTIFIER COL var_list {
+| IDENTIFIER T_COL IDENTIFIER COL var_list {
 	if(types.find($1) == types.end())
 		yyerror("Undefined type.");
 	else {
-		struct_sub_type[string($<str>-1) + "." + string($2)] = $1; 
+		struct_sub_type[string($<str>-1) + "." + string($3)] = $1; 
 	}
-	types[$<str>-1] += types[$1];
+	types.set(string($<str>-1), types.get(string($<str>-1)) + types.get($1));
+
+
 }
 
 if_block : IF OP_BR expr COMPARATOR expr  CL_BR if_scope_prod OP_PARENS lines CL_PARENS {
@@ -476,8 +499,9 @@ IDENTIFIER_LIST : IDENTIFIER_LIST COMMA specifier IDENTIFIER EQ expr {
 	$$->type = declaration_type;
 	int t_size=1;
 	for(auto el: $4->v)
-		t_size *= stoi(el); 
-	$$->ic = "alloc " + string($3) + "  " + to_string(t_size) + ";\n";
+		t_size *= stoi(el); 	
+//	$$->ic = "alloc " + scoped_name(string($3)) + "  " + to_string(t_size*types[$$->type]) + ";\n";
+	addr_table[scoped_name($3)] = t_size*types.get($$->type);
 	$$->ic += $1->ic;
 } | IDENTIFIER dim_list {
 		$$ = create();
@@ -489,8 +513,10 @@ IDENTIFIER_LIST : IDENTIFIER_LIST COMMA specifier IDENTIFIER EQ expr {
 	$$->type = declaration_type;
 	int t_size=1;
 	for(auto el: $2->v)
-		t_size *= stoi(el); 
-	$$->ic = "alloc " + string($1) + "  " + to_string(t_size) + ";\n";
+		t_size *= stoi(el);
+	 
+//	$$->ic = "alloc " + scoped_name(string($1)) + "  " + to_string(t_size*types[$$->type]) + ";\n";
+	addr_table[scoped_name($1)] = t_size*types.get($$->type);
 }
 
 dim_list : dim_list OP_SQBR INT_VAL CL_SQBR {
@@ -519,6 +545,13 @@ place_holder : IDENTIFIER {
 } | STAR IDENTIFIER {
 	strcpy($$, "*");
 	strcat($$, $2);
+} | IDENTIFIER dim_list {
+	strcpy($$, $1);
+	for(auto el: $2->v){
+		strcat($$, "[");
+		strcat($$, el.c_str());
+		strcat($$, "]");
+	}
 } 
 /*   --- ND --- */
 
@@ -603,13 +636,30 @@ strcpy($$, $1);
 strcpy($$, $1);		 
 }
 %%
-int main(){
+int main(int argc, char *argv[]){
+	string file_name("name.c");
+	while(*(file_name.end()-1)!='.')
+		file_name.pop_back();
+	file_name.pop_back();
+	cout<<"Compiling file "<<file_name<<endl;
+	ofstream asm_file, ir_file; 	
+	asm_file.open(file_name + ".asm");
+	ir_file.open(file_name + ".ir");	
 	global_addr = 0;	
-	types_init();
 	yyparse();
 	if(parser_failed)
 		cout<<"\n\e[0;31mCompilation failed!!\n";
-	else gen_assembly(ir);
+	else {
+		string mips_asm = gen_assembly(ir);
+		asm_file<<mips_asm;
+		ir_file<<ir;
+		cout<<"\nCompiled Successfully!!\n";
+		sym_table.render();
+		cout<<"\n\nAll variables according to sizes:\n";
+		for(auto el: addr_table){
+			cout<<el.first<<"     "<<el.second<<endl;
+		}
+	}
 return 0;
 }
 void yywrap(void) {
