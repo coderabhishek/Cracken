@@ -169,6 +169,8 @@ class sym_table_cl{
 
 		void clear_scope(){
 			for(auto it = sym_tab.begin();it!=sym_tab.end();++it){
+				if(it->second.empty())
+					continue;
 				assert(it->second.top().first <= cur_scope);
 				if(it->second.top().first == cur_scope){
 					(it->second).pop();
@@ -252,7 +254,7 @@ string find_type(string s){
 		}
 		i = 0;
 		for(i=0;i<t_v.size() and i<s_v.size();++i)
-			if(t_v[i]<=s_v[i])
+			if(t_v[i]<=s_v[i] || t_v[i]<0 || s_v[i]<0)
 				yyerror("Dimensions mismatched!!");
 		if(i==s_v.size() and i<t_v.size()){
 			for(;i<t_v.size();++i)
@@ -265,7 +267,7 @@ string find_type(string s){
 		return res;	
 
 	}
-	if(s[0] == '*'){
+	if(s[0] == '^'){
 		s.erase(s.begin());
 		auto res = find_type(s);
 		if(res.size()>2 and res[0]=='p' and res[1]=='_'){
@@ -355,9 +357,9 @@ string scoped_name(string s){
 		s.erase(s.begin());
 		return "&" + scoped_name(s);
 	}
-	if(s[0] == '*'){
+	if(s[0] == '^'){
 		s.erase(s.begin());
-		return "*" + scoped_name(s);
+		return "^" + scoped_name(s);
 	}
 	if(s.find(".")!= string::npos){
 		auto temp = s;

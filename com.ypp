@@ -217,8 +217,11 @@ place_holder_list : expr{
 	assert(param_itr == p_end_iterator.end());	
 	auto t_str = f_name;
 	func_itr = find_if(funcs.begin(), funcs.end(), [t_str](func f) -> bool {f.name == t_str;});
-	if(func_itr == funcs.end())
+	if(func_itr == funcs.end()){
 		yyerror("No such function as " + t_str);
+		return 0;
+	}
+	
 	param_itr = func_itr->para_type_list.begin();
 	if(!coercible(*param_itr, $1->type))
 		yyerror("Arg type mismatched for arg " + to_string(param_itr - func_itr->para_type_list.begin()));
@@ -590,7 +593,7 @@ place_holder : IDENTIFIER {
 	strcpy($$, "&");
 	strcat($$, $2);
 } | DEREF IDENTIFIER {
-	strcpy($$, "*");
+	strcpy($$, "^");
 	strcat($$, $2);
 } | IDENTIFIER dim_list {
 	strcpy($$, $1);
@@ -634,7 +637,7 @@ expr: expr PLUS expr_l {
 	$$->type = $2->type;
 	string temp = $2->ic + "\n";
 	$$->ic = temp;
-}
+} 
 
 expr_l : expr_l STAR expr_ll {
        cout<<"YAYTYYYYYY\n";
@@ -674,9 +677,7 @@ expr_ll : place_holder {
 	$$->type = $1->type;
 	$$->ic += $1->ic;
 	$$->ic += "_t0 = _t7;#eq\n";
-} 
-
- 
+}  
 
 
 

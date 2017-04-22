@@ -32,7 +32,7 @@
 '.' {strcpy(yylval.str, yytext); return CONST_STR; } 
 
 [a-zA-Z]+[a-zA-Z0-9_.]* { strcpy(yylval.str, yytext); return IDENTIFIER; }
-[0-9]+	{ strcpy(yylval.str, yytext); return INT_VAL; }
-[0-9]+\.[0-9]+ {strcpy(yylval.str, yytext); return REAL_VAL; }
+[-]?[0-9]+	{ strcpy(yylval.str, yytext); return INT_VAL; }
+[-]?[0-9]+\.[0-9]+ {strcpy(yylval.str, yytext); return REAL_VAL; }
 
 [ \t\n] {;}
