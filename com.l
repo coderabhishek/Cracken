@@ -21,6 +21,7 @@
 ":" { return T_COL; }
 "," { return COMMA; }
 "&" { return AMP; }
+"for" { return FOR; }
 "if" { return IF; }
 "else" { return ELSE; }
 "while" { return WHILE; }
