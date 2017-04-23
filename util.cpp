@@ -235,11 +235,14 @@ string find_type(string s){
 		vector<int> t_v, s_v;
 		while(i<s.size()){
 			string t;
-			while(i<s.size() and isdigit(s[i])){
+			while(s[i]!=']'){
 				t.push_back(s[i]);
 				i++;
 			}
+			if(isdigit(t[0]))
 			s_v.push_back(stoi(t));
+			else s_v.push_back(0);
+			cout<<"Just pushed  "<<*(s_v.end()-1)<<"\n\n";
 		i++;
 		i++;	
 		}
@@ -255,13 +258,20 @@ string find_type(string s){
 		i = 0;
 		for(i=0;i<t_v.size() and i<s_v.size();++i)
 			if(t_v[i]<=s_v[i] || t_v[i]<0 || s_v[i]<0)
-				yyerror("Dimensions mismatched!!");
+				yyerror("#Dimensions mismatched!!");
 		if(i==s_v.size() and i<t_v.size()){
 			for(;i<t_v.size();++i)
 				res += "_" + to_string(t_v[i]);
 		}
 		else if(i==t_v.size() and i<s_v.size()){
-			yyerror("Dimensions mismatched!!");
+			cout<<"T_V:\n";
+			for(auto el: t_v)
+				cout<<el<<"   ";
+			cout<<"\n\n";
+			for(auto el: s_v)
+				cout<<el<<"    ";
+			cout<<"\n\n";
+			yyerror("$Dimensions mismatched!!");
 			return "";
 		}
 		return res;	

@@ -289,7 +289,7 @@ for(auto el: $1)
 		yyerror("Array dimensions mismatch!!");
 	$$->type = "void";
 	$$->ic = "_t0 = _t1";	
-} | IDENTIFIER dim_list EQ expr COL {
+} | IDENTIFIER dim_list EQ expr {
 	string subject($1);
 	for(auto el: $2->v){
 		subject.push_back('[');
@@ -329,6 +329,8 @@ for(auto el: $2->v)
 		i++;
 	i++;
 	for(auto el: $2->v){
+		if(!isdigit(el[0]))
+			continue;
 		string it = "";
 		while(i<type.size() and isdigit(type[i]))
 			it.push_back(type[i++]);
@@ -591,12 +593,20 @@ IDENTIFIER_LIST : IDENTIFIER_LIST COMMA specifier IDENTIFIER EQ expr {
 	types.set(ch, t_size*types.get($$->type)); 
 }
 
-dim_list : dim_list OP_SQBR INT_VAL CL_SQBR {
+dim_list : dim_list OP_SQBR place_holder CL_SQBR {
 	 $$ = $1;
-	$$->v.push_back($3);		
-}| OP_SQBR INT_VAL CL_SQBR {
+	string s;
+	if(!isdigit($3[0]))
+		s = scoped_name($3);
+	else s = string($3);
+	$$->v.push_back(s);		
+}| OP_SQBR place_holder CL_SQBR {
 	$$ = new dimension_list();
-	$$->v.push_back($2); 
+	string s;
+	if(!isdigit($2[0]))
+		s = scoped_name($2);
+	else s = string($2);
+	$$->v.push_back(s); 
 }
 
 
@@ -654,12 +664,7 @@ expr: expr PLUS expr_l {
 	$$->type = $1->type;
 	string temp = $1->ic + "\n";
 	$$->ic = temp;
-}| OP_BR expr CL_BR {
-	$$ = create();
-	$$->type = $2->type;
-	string temp = $2->ic + "\n";
-	$$->ic = temp;
-} 
+}  
 
 expr_l : expr_l STAR expr_ll {
        cout<<"YAYTYYYYYY\n";
@@ -699,7 +704,12 @@ expr_ll : place_holder {
 	$$->type = $1->type;
 	$$->ic += $1->ic;
 	$$->ic += "_t0 = _t7;#eq\n";
-}  
+} | OP_BR expr CL_BR {
+	$$ = create();
+	$$->type = $2->type;
+	string temp = $2->ic + "\n";
+	$$->ic = temp;
+} 
 
 
 
